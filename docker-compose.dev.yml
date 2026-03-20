@@ -6,7 +6,7 @@ services:
       - ./backend/.env
     volumes:
       - ./backend:/app
-      - static_files:/app/staticfiles
+      - ./staticfiles:/app/staticfiles
     expose:
       - "8000"
     command: python manage.py runserver 0.0.0.0:8000
@@ -20,6 +20,3 @@ services:
       - ./bot:/app
     depends_on:
       - web
-
-volumes:
-  static_files:
