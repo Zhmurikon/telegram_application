@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from companies.models import ApiKey
+from companies.models import ApiKey, InviteCode
 from leads.models import Lead
 
 logger = logging.getLogger(__name__)
@@ -126,3 +126,65 @@ class LeadCreateView(APIView):
         lines.append(f'🕐 {lead.created_at.strftime("%d.%m.%Y %H:%M")}')
 
         return '\n'.join(lines)
+    
+
+
+class SubscribeView(APIView):
+
+    def post(self, request):
+        invite_code = request.data.get('invite_code', '').strip()
+        telegram_id = request.data.get('telegram_id')
+        username = request.data.get('username', '').strip()
+
+        if not invite_code or not telegram_id:
+            return Response(
+                {'error': 'invite_code и telegram_id обязательны.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            code_obj = InviteCode.objects.select_related('company').get(
+                code=invite_code,
+                is_used=False,
+            )
+        except InviteCode.DoesNotExist:
+            return Response(
+                {'error': 'Код недействителен или уже использован.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not code_obj.company.is_active:
+            return Response(
+                {'error': 'Компания неактивна.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from accounts.models import TelegramSubscriber
+        from django.utils import timezone
+
+        # Если уже подписан на эту компанию
+        if TelegramSubscriber.objects.filter(
+            telegram_id=telegram_id,
+            company=code_obj.company,
+        ).exists():
+            return Response(
+                {'error': 'Вы уже подписаны на уведомления этой компании.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        TelegramSubscriber.objects.create(
+            company=code_obj.company,
+            telegram_id=telegram_id,
+            username=username,
+        )
+
+        # Помечаем код как использованный
+        code_obj.is_used = True
+        code_obj.used_by_telegram_id = telegram_id
+        code_obj.used_at = timezone.now()
+        code_obj.save()
+
+        return Response(
+            {'company_name': code_obj.company.name},
+            status=status.HTTP_201_CREATED,
+        )
