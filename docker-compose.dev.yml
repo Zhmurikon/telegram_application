@@ -5,19 +5,21 @@ services:
     env_file:
       - ./backend/.env
     volumes:
-      - sqlite_data:/app
+      - ./backend:/app
       - static_files:/app/staticfiles
     expose:
       - "8000"
+    command: python manage.py runserver 0.0.0.0:8000
 
   bot:
     build: ./bot
     restart: unless-stopped
     env_file:
       - ./bot/.env
+    volumes:
+      - ./bot:/app
     depends_on:
       - web
 
 volumes:
-  sqlite_data:
   static_files:
